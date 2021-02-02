@@ -34,24 +34,45 @@ import time
 import warnings
 
 warnings.filterwarnings("ignore")
-def parse_args():
-    """
-    Parse input arguments
-    """
-    parser = argparse.ArgumentParser(description='Train bone segmentation model')
-    parser.add_argument("--net", help="netname for network factory", type=str)
-    parser.add_argument("--model_file", help="saved model file", type=str)
-    parser.add_argument("--data_root", help="validation data folder", type=str)
-    parser.add_argument("--gpu", help="use GPU", default=False, type=bool)
-    parser.add_argument("--fold", help="fold for cross validation", default=1, type=int)
-    parser.add_argument("--vis", help="visualization", default=False, type=bool)
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(1)
 
-    args = parser.parse_args()
-    return args
+def dirlab_4dct_header():
+    """
+    size and voxel spacing of the images are available at https://www.dir-lab.com/ReferenceData.html
+    """
+    dirlab_info = dict()
+    for cn in range(1, 11):
+        dirlab_info['case' + str(cn)] = {}
+    dirlab_info['case1']['Size'] = [256, 256, 94]
+    dirlab_info['case2']['Size'] = [256, 256, 112]
+    dirlab_info['case3']['Size'] = [256, 256, 104]
+    dirlab_info['case4']['Size'] = [256, 256, 99]
+    dirlab_info['case5']['Size'] = [256, 256, 106]
+    dirlab_info['case6']['Size'] = [512, 512, 128]
+    dirlab_info['case7']['Size'] = [512, 512, 136]
+    dirlab_info['case8']['Size'] = [512, 512, 128]
+    dirlab_info['case9']['Size'] = [512, 512, 128]
+    dirlab_info['case10']['Size'] = [512, 512, 120]
 
+    dirlab_info['case1']['Spacing'] = [0.97, 0.97, 2.5]
+    dirlab_info['case2']['Spacing'] = [1.16, 1.16, 2.5]
+    dirlab_info['case3']['Spacing'] = [1.15, 1.15, 2.5]
+    dirlab_info['case4']['Spacing'] = [1.13, 1.13, 2.5]
+    dirlab_info['case5']['Spacing'] = [1.10, 1.10, 2.5]
+    dirlab_info['case6']['Spacing'] = [0.97, 0.97, 2.5]
+    dirlab_info['case7']['Spacing'] = [0.97, 0.97, 2.5]
+    dirlab_info['case8']['Spacing'] = [0.97, 0.97, 2.5]
+    dirlab_info['case9']['Spacing'] = [0.97, 0.97, 2.5]
+    dirlab_info['case10']['Spacing'] = [0.97, 0.97, 2.5]
+
+    return dirlab_info
+
+def compute_tre(mov_lmk, ref_lmk, spacing):
+    #TRE, unit: mm
+    diff = (ref_lmk - mov_lmk) * spacing
+    diff = torch.Tensor(diff)
+    tre = diff.pow(2).sum(1).sqrt()
+    mean, std = tre.mean(), tre.std()
+    return mean, std, diff
 
 def net_forward(net, data_warp, data_fix, label_warp, gpu):
     if gpu:
@@ -106,11 +127,28 @@ def draw_label(data, label):
         cv2.circle(data[x, :, :, :], (y,z), point_size, point_color, thickness)
     return data
 
+def parse_args():
+    """
+    Parse input arguments
+    """
+    parser = argparse.ArgumentParser(description='Train bone segmentation model')
+    parser.add_argument("--net", help="netname for network factory", type=str)
+    parser.add_argument("--model_file", help="saved model file", type=str)
+    parser.add_argument("--data_root", help="validation data folder", type=str)
+    parser.add_argument("--gpu", help="use GPU", default=False, type=bool)
+    parser.add_argument("--fold", help="fold for cross validation", default=1, type=int)
+    parser.add_argument("--vis", help="visualization", default=False, type=bool)
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+
+    args = parser.parse_args()
+    return args
 
 if __name__ == '__main__':
     args = parse_args()
     print('gpu', args.gpu)
-
+    
     # build dataset
     # trans_data = [ CenterCroplandmarks(dst_size=(96,256,256)) ]
     trans_data = [ Padlandmarks(dst_size=(96,256,256)) ]
@@ -131,20 +169,47 @@ if __name__ == '__main__':
         print('GPU')
         net = net.cuda()
     # testing 
-    evalTRE = EvalTarRegErr()
     random_idx = list(range(num_pair))
+    dir_info = dirlab_4dct_header()
     for i in random_idx[0:1]:
         print("processing %d" % i)
-
         # fetch data
         data_left, data_right = dataset[i]
         data_left, label_left = data_left
         data_right, label_right = data_right
-        TRE_orig = evalTRE.AddResult(label_left, label_right)
         #label_right to get the warped position 
         pred_left, flow, offset_list, warp_label_left = net_forward(net, data_left, data_right, label_right, args.gpu)
-        TRE = evalTRE.AddResult(label_left, warp_label_left)
-        print(TRE)
+        # compute TRE
+        case_num = 'case' + str(args.fold)
+        img_spacing = [2.5, 1.0, 1.0]
+        raw_shape = np.flip(dir_info[case_num]['Size'])
+        resize_factor = data_left.shape / raw_shape #new_spacing
+        # resize the landmark
+        label_left = label_left * resize_factor
+        label_right = label_right * resize_factor
+
+        #flow sampling
+        ref_lmk_index = np.round(label_right).astype('int32')
+
+        label_warp = label_right.copy()
+        for i in range(300):
+            wi, hi, di = ref_lmk_index[i]
+            w0, h0, d0 = flow[0, :, di, hi, wi]
+            label_warp[i] += [w0, h0, d0]
+        #    break
+            
+        # compute TRE
+        #no reg
+        tre_mean_bf, tre_std_bf, diff_br = compute_tre(label_left, label_right, img_spacing)
+        print('TRE-before reg, mean: {:.2f},std: {:.2f}'.format(
+                tre_mean_bf, tre_std_bf))
+        #with reg
+        tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
+        print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(
+                tre_mean_af, tre_std_af))
+
+        if args.vis is False:
+            continue
         # to numpy
         data_left = data_left.numpy()
         data_left = (data_left*255).astype(np.uint8)
@@ -154,8 +219,6 @@ if __name__ == '__main__':
         label_left = label_left.numpy().astype(np.uint8)
         pred_left = (pred_left*255).astype(np.uint8)
 
-        if args.vis is False:
-            continue
         # offset_list = [ vis_flow(offset) for offset in offset_list ]
         # flow = vis_flow(flow)
         # data_left_org = draw_label(data_left, label_left)

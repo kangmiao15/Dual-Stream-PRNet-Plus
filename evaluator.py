@@ -205,9 +205,6 @@ class EvalTarRegErr(object):
         assert nb_common > 0, 'no common landmarks for metric'
         points_1 = np.asarray(points_1)[:nb_common]
         points_2 = np.asarray(points_2)[:nb_common]
-        # convert to world corordination(mm) with space resolution
-        points_1 = points_1 * np.array([2.5,1.0,1.0])
-        points_2 = points_2 * np.array([2.5,1.0,1.0])
         # diffs = np.mean(np.sqrt(np.sum(np.power(points_1 - points_2, 2), axis=1)))
         errors = [np.linalg.norm(points_1 - points_2,axis = 1)]
         mean_error = np.mean(errors)
