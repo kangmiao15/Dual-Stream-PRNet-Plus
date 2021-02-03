@@ -96,6 +96,54 @@ class Padlandmarks:
         print('after', volume.shape)
         return volume,landmarks
 
+class CropPadlandmarks:
+    
+    def __init__(self, dst_size, rnd_offset=-1):
+        self.dst_size = dst_size
+        self.rnd_offset = rnd_offset
+    
+
+    def __call__(self, volume, landmark):
+        org_D, org_H, org_W = volume.shape
+        dst_D, dst_H, dst_W = self.dst_size
+        if dst_D > org_D:
+            pad = np.zeros((dst_D-org_D, volume.shape[1], volume.shape[2]), dtype=volume.dtype)
+            volume = np.concatenate((volume, pad), axis=0)
+        if dst_H > org_H:
+            pad = np.zeros((volume.shape[0], dst_H-org_H, volume.shape[2]), dtype=volume.dtype)
+            volume = np.concatenate((volume, pad), axis=1)
+        if dst_W > org_W:
+            pad = np.zeros((volume.shape[0], volume.shape[1], dst_W-org_W), dtype=volume.dtype)
+            volume = np.concatenate((volume, pad), axis=2)
+        org_D, org_H, org_W = volume.shape
+        D_start, D_end = self.center_crop_idx(org_D, dst_D) 
+        H_start, H_end = self.center_crop_idx(org_H, dst_H)
+        W_start, W_end = self.center_crop_idx(org_W, dst_W)
+        num_points = landmark.shape[0]
+        new_landmarks = []
+
+        for i in range(num_points):
+            d = landmark[i, 0]
+            h = landmark[i, 1]
+            w = landmark[i, 2]
+            cond1 = d < D_start or d >= D_end
+            cond2 = h < H_start or h >= H_end
+            cond3 = w < W_start or w >= W_end
+            if cond1 or cond2 or cond3:
+                print('elimilate the landmark:', (d, h, w))
+            else:
+                new_landmarks.append([d, h, w])
+        new_landmarks = np.array(new_landmarks)
+        new_landmarks = new_landmarks - np.array([D_start, H_start, W_start])
+        return [ volume[D_start:D_end, H_start:H_end, W_start:W_end].copy(), new_landmarks]
+
+    def center_crop_idx(self, org, dst):
+        center = org/2.0
+        if self.rnd_offset > 0:
+            center = center + random.randint(-self.rnd_offset, self.rnd_offset)
+        start = int(center - dst/2.0)
+        end = int(center + dst/2.0)
+        return start, end
 class RandomRotate3D:
 
     def __init__(self):

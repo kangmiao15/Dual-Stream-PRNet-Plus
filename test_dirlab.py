@@ -150,8 +150,8 @@ if __name__ == '__main__':
     print('gpu', args.gpu)
     
     #rp_label_left build dataset
-    # trans_data = [ CenterCroplandmarks(dst_size=(96,256,256)) ]
-    trans_data = [ Padlandmarks(dst_size=(96,256,256)) ]
+    trans_data = [ CropPadlandmarks(dst_size=(96,224,224)) ]
+    # trans_data = [ Padlandmarks(dst_size=(96,256,256)) ]
     trans_pair = []
     data_list = [ ("case%d" % (args.fold) , "T%02d" % j) for j in [0, 50]]
     print(data_list)
