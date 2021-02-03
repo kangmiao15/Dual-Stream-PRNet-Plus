@@ -28,7 +28,7 @@ def initialize_setting(current_experiment, where_to_run=None):
     setting['DVFPad_S1'] = 0
     setting['DVFPad_S2'] = 0
     setting['DVFPad_S4'] = 0
-    setting['VoxelSize'] = [2, 2, 2.5] 
+    setting['VoxelSize'] = [1, 1, 1] 
     setting['data'] = dict()
     setting['DataList'] = ['SPREAD']
     setting['data']['SPREAD'] = load_data_setting('SPREAD')
@@ -58,8 +58,8 @@ def root_address_generator(where_to_run='Auto'):
             root_folder = 'E:/PHD/Software/Project/DL/'
             data_folder = 'E:/PHD/Database/'
         elif sys.platform == 'linux':
-            root_folder = './data/'
-            data_folder = './data/'
+            root_folder = './'
+            data_folder = '/media/ubuntu/DISK2/code/local/DIR-Lab-data-process/DIR-Lab/'
         else:
             raise ValueError('sys.platform is only defined in ["win32"]. Please defined new os in setting.setting_utils.root_address_generator()')
     elif where_to_run == 'Cluster':
@@ -103,7 +103,7 @@ def load_data_setting(selected_data):
     """
     load the general setting of selected data like default pixel value and types of images (baseline, follow-up...)
     :param selected_data:
-    :return:
+    :return
     """
     data_setting = dict()
     if selected_data == 'SPREAD':
@@ -123,10 +123,10 @@ def load_data_setting(selected_data):
         data_setting['types'] = ['T00', 'T10', 'T20', 'T30', 'T40', 'T50', 'T60', 'T70', 'T80', 'T90']     # for eg: 'Fixed' or 'Moving'
         data_setting['expPrefix'] = 'case'         # for eg: case
         data_setting['DefaultPixelValue'] = -2048  # The pixel value when a transformed pixel is outside of the image
-        data_setting['VoxelSize'] = [2, 2, 2.5]
+        data_setting['VoxelSize'] = [1, 1, 1]
         data_setting['AffineRegistration'] = True
         data_setting['UnsureLandmarkAvailable'] = False
-        data_setting['CNList'] = [i for i in range(6, 11)]
+        data_setting['CNList'] = [i for i in range(1, 11)]
 
     elif selected_data == 'DIR-Lab_COPD':
         data_setting['ext'] = '.mha'
@@ -394,4 +394,496 @@ def address_generator(s, requested_address, data=None, deform_exp=None, type_im=
         if requested_address in ['DVF_histogram', 'Jac', 'Jac_histogram']:
             name_dic[requested_address] = requested_address + '_pad' + str(dvf_pad)
             if stage > 1:
-                name_
+                name_dic[requested_address] = name_dic[requested_address] + '_s' + str(stage)
+            if padto is not None:
+                name_dic[requested_address] = name_dic[requested_address] + '_p' + str(padto)
+            if requested_address in ['DVF_histogram', 'Jac_histogram']:
+                address[requested_address] = address['DFolder'] + name_dic[requested_address] + '.png'
+            elif requested_address in ['Jac']:
+                address[requested_address] = address['DFolder'] + name_dic[requested_address] + ext
+
+    elif requested_address in ['IShuffledFolder', 'IShuffledSetting', 'IShuffled', 'IShuffledName']:
+        if requested_address in ['IShuffledFolder', 'IShuffledSetting', 'IShuffled']:
+            ishuffled_root_folder_name = ''
+            for my_dict in s['DataExpDict']:
+                ishuffled_root_folder_name = ishuffled_root_folder_name+my_dict['data']+'_'+my_dict['deform_exp']+'_'
+            ishuffled_root_folder = root_folder+'Elastix/Artificial_Generation/IShuffled/IShuffled_'+ishuffled_root_folder_name[:-1]+'/'
+            ishuffled_folder_name = train_mode+'_images'+str(len(im_list_info))+'_S'+str(stage)+'_exp' + str(ishuffled_exp)
+            address['IShuffledFolder'] = ishuffled_root_folder + ishuffled_folder_name + '/'
+            address['IShuffledSetting'] = address['IShuffledFolder'] + 'IShuffled.setting'
+
+        if requested_address in ['IShuffled', 'IShuffledName']:
+            address['IShuffledName'] = 'SemiEpoch'+str(semi_epoch)+'_Chunk'+str(chunk)+'.npy'
+
+        if requested_address in ['IShuffled']:
+            address['IShuffled'] = address['IShuffledFolder'] + address['IShuffledName']
+
+    elif requested_address in ['IndexFolder', 'IClassFolder', 'IClass', 'IClassName']:
+        address['IndexFolder'] = deform_exp_folder + 'Index' + '_S' + str(stage) + '/'
+        address['IClassFolder'] = address['IndexFolder'] + 'IClass/'
+        if requested_address in ['IClass', 'IClassName']:
+            dsmooth_mod = dsmooth % len(s['deform_exp'][deform_exp]['DeformMethods'])
+            deform_number = get_deform_number_from_dsmooth(s, dsmooth, deform_exp=deform_exp)
+            class_balanced_plus_zero = np.r_[np.array([0]), s['ClassBalanced']]
+            address['IClassName'] = deform_exp+'_'+type_im_name+'_cn'+str(cn)+'_Dsmooth'+str(dsmooth)+'_'+s['deform_exp'][deform_exp]['DeformMethods'][dsmooth_mod] +\
+                '_'+'D'+str(deform_number)+'_M'+str(s['Margin'])+'_Z'+str(dvf_pad)+'_Torso'+str(int(s['UseTorsoMask']))+'_c'+'{:.1f}_'.format(
+                class_balanced_plus_zero[c])+'{:.1f}'.format(class_balanced_plus_zero[c + 1])+'.npy'
+            address['IClass'] = address['IClassFolder'] + address['IClassName']
+
+    training_log_list = ['ModelFolder', 'summary_train', 'summary_test', 'summary_validation', 'LogFile', 'log_im_file', 'Plots_folder',
+                         'saved_model', 'saved_model_with_step', 'plot_fig', 'log_folder']
+    real_pair_log_list = ['result_folder', 'result_step_folder', 'result_detail_folder', 'result_landmarks_folder',
+                          'full_reg_folder', 'dvf_s0', 'dvf_s_up', 'dvf_s0_jac', 'dvf_s0_jac_hist_plot', 'MovedIm', 'MovedLung', 'MovedTorso', 'landmarks_file',
+                          'dvf_error']
+    if requested_address in training_log_list+real_pair_log_list:
+        address['log_folder'] = s['log_root_folder'] + log_sub_folder + '/' + current_experiment + '/'
+        if step is None:
+            step = load_global_step_from_predefined_list(current_experiment)
+        if requested_address in training_log_list:
+            address['ModelFolder'] = address['log_folder'] + 'train/Model/'
+            address['summary_train'] = address['log_folder'] + 'train/'
+            address['summary_test'] = address['log_folder'] + 'test/'
+            address['summary_validation'] = address['log_folder'] + 'validation/'
+            address['LogFile'] = address['ModelFolder'] + 'log.txt'
+            address['log_im_file'] = address['ModelFolder'] + 'log_im.txt'
+            address['Plots_folder'] = address['ModelFolder'] + 'Plots/'
+            address['saved_model'] = address['ModelFolder'] + 'Saved/RegNet3DModel.ckpt'
+            address['saved_model_with_step'] = address['saved_model'] + '-' + step
+            address['plot_fig'] = address['ModelFolder']+'Plots/y_'+str(plot_mode)+'_itr'+str(plot_itr)+'_dir'+str(plot_i)+'.png'
+
+        elif requested_address in real_pair_log_list:
+            address['result_folder'] = address['log_folder'] + 'Results/'
+            stage_step_folder = ''
+            for stage_str in stage_list:
+                stage_step_folder = stage_step_folder + 'S' + str(stage_str) + '_'
+            stage_step_folder = stage_step_folder + 'step_' + str(step) + '/'
+
+            if read_pair_mode == 'real':
+                address['result_step_folder'] = address['result_folder']+stage_step_folder
+            elif read_pair_mode == 'synthetic':
+                address['result_step_folder'] = address['result_folder']+data+'/'+deform_exp+'/'+stage_step_folder
+
+            address['result_landmarks_folder'] = address['result_step_folder'] + 'Landmarks/'
+            address['landmarks_file'] = address['result_landmarks_folder'] + current_experiment + '_' + base_reg + '-' + str(step) + '.pkl'
+
+            if requested_address == 'result_detail_folder':
+                address['result_detail_folder'] = address['result_landmarks_folder'] + pair_info[0]['data'] +\
+                                                  '_TypeIm'+str(pair_info[0]['type_im'])+'_TypeIm'+str(pair_info[1]['type_im'])+'/'
+
+            if requested_address in ['full_reg_folder', 'dvf_s0', 'dvf_s0_jac', 'dvf_s0_jac_hist_plot', 'dvf_s_up', 'MovedIm', 'MovedLung', 'MovedTorso', 'dvf_error']:
+                address['full_reg_folder'] = address['result_step_folder'] + 'Registration/' + base_reg + '/' +\
+                                             pair_info[0]['data']+'_cn'+str(pair_info[0]['cn'])+'_type_im'+str(pair_info[0]['type_im'])+'_' +\
+                                             pair_info[1]['data']+'_cn'+str(pair_info[1]['cn'])+'_type_im'+str(pair_info[1]['type_im'])+'/'
+
+                address['dvf_s0'] = address['full_reg_folder'] + 'DVF_S0' + ext
+                address['dvf_s0_jac'] = address['full_reg_folder'] + 'DVF_S0_Jac' + ext
+                address['dvf_s0_jac_hist_plot'] = address['full_reg_folder'] + 'DVF_S0_Jac_Hist.png'
+
+                address['dvf_s_up'] = address['full_reg_folder'] + 'DVF_S' + str(stage) + '_up' + ext
+                address['MovedIm'] = address['full_reg_folder'] + 'MovedImage_S' + str(stage) + ext
+                address['MovedLung'] = address['full_reg_folder'] + 'MovedLung_S' + str(stage) + ext
+                address['MovedTorso'] = address['full_reg_folder'] + 'MovedTorso_S' + str(stage) + ext
+                if requested_address == 'dvf_error':
+                    address['dvf_error'] = address['full_reg_folder'] + 'DVF_Error_' + base_reg + ext
+
+    return address[requested_address]
+
+
+def get_deform_number_from_dsmooth(setting, dsmooth, deform_exp=None):
+    if deform_exp is None:
+        deform_exp = setting['DeformExpList'][0]
+    deform_methods = setting['deform_exp'][deform_exp]['DeformMethods']
+    dsmooth_mod = dsmooth % len(deform_methods)
+    selected_deform_method = deform_methods[dsmooth_mod]
+    deform_method_indices = (np.where(np.array(deform_methods) == selected_deform_method))[0]
+    deform_number = np.where(deform_method_indices == dsmooth_mod)[0][0]
+    return int(deform_number)
+
+
+def load_network_setting(setting, network_name):
+    """
+    load general setting by network_name.
+    :param setting: 
+    :param network_name: 
+    
+    :return: 
+        setting['R']:   Radius of normal resolution patch size. Total size is (2*R +1)
+        setting['Ry']:  Radius of output. Total size is (2*Ry +1)
+        setting['ImPad_Sx']: Pad images with setting['DefaultPixelValue']
+        setting['Margin']: Margin from the border to select random patches in the DVF numpy array, not Im numpy array
+        setting['NetworkDesign]: network name, in order to keep it in the setting dict
+        
+    """
+    import functions.network as network
+    setting['NetworkDesign'] = network_name
+    setting['R'], setting['Ry'] = getattr(getattr(network, network_name), 'raidus_train')()
+    setting['ImPad_S'+str(setting['stage'])] = setting['R']-setting['Ry']
+    setting['Margin'] = setting['Ry'] + 1
+    return setting
+
+
+def get_im_info_list_from_train_mode(setting, train_mode, load_mode='Single', read_pair_mode=None, stage=None):
+    """
+    :param setting:
+    :param train_mode: should be in ['Training', 'Validation', 'Testing']
+    :param load_mode: 'Single': mostly used in synthetic images, so you only need no know one image the other one will be generated.
+                      'Pair'  : mostly used in real pair
+                      default value is 'Single'
+    :return: im_info_list:
+                    load_model='Single': A list of dictionaries with single image information including:
+                                        'data', 'deform_exp', 'type_im', 'cn', 'dsmooth', 'deform_method', 'deform_number'
+                    load_model='Pair': Two list of dictionaries with information including:
+                                        'data', 'type_im', 'cn'
+    """
+    if train_mode not in ['Training', 'Validation', 'Testing']:
+        raise ValueError("train_mode should be in ['Training', 'Validation', 'Testing'], but it is set to"+train_mode)
+
+    clean_data_exp_dict = []
+    for data_exp in setting['DataExpDict']:
+        dict_general = dict()
+        for key in data_exp.keys():
+            if key in ['data', 'deform_exp']:
+                dict_general[key] = copy.deepcopy(data_exp[key])
+            elif train_mode in key:
+                key_new = key.replace(train_mode, '')
+                dict_general[key_new] = copy.deepcopy(data_exp[key])
+        clean_data_exp_dict.append(dict_general)
+
+    im_info_list = []
+    if load_mode == 'Single':
+        for data_dict in clean_data_exp_dict:
+            for cn in data_dict['CNList']:
+                for type_im in data_dict['TypeImList']:
+                    for dsmooth in data_dict['DSmoothList']:
+                        im_info_dict = {'data': data_dict['data'], 'type_im': type_im, 'cn': cn}
+                        if 'DeformMethods' in setting['deform_exp'][data_dict['deform_exp']].keys():
+                            deform_methods = copy.deepcopy(setting['deform_exp'][data_dict['deform_exp']]['DeformMethods'])
+                            deform_method = deform_methods[dsmooth % len(deform_methods)]
+                            deform_number = get_deform_number_from_dsmooth(setting, dsmooth, deform_exp=data_dict['deform_exp'])
+                            im_info_dict['deform_exp'] = data_dict['deform_exp']
+                            im_info_dict['dsmooth'] = dsmooth
+                            im_info_dict['deform_method'] = deform_method
+                            im_info_dict['deform_number'] = deform_number
+
+                        if 'DeformedImExt'in data_dict.keys():
+                            im_info_dict['deformed_im_ext'] = data_dict['DeformedImExt']
+
+                        if 'stage' in setting.keys() or stage is not None:
+                            if stage is None:
+                                stage = setting['stage']
+                            im_info_dict['stage'] = stage
+                            if 'PadTo' in setting.keys():
+                                if 'stage'+str(stage) in setting['PadTo'].keys():
+                                    im_info_dict['padto'] = setting['PadTo']['stage'+str(stage)]
+                        if 'Spacing' in data_dict.keys():
+                            im_info_dict['spacing'] = data_dict['Spacing']
+                        im_info_list.append(im_info_dict)
+    elif load_mode == 'Pair':
+        if read_pair_mode is None:
+            read_pair_mode = setting['read_pair_mode']
+
+        if read_pair_mode == 'real':
+            for data_dict in clean_data_exp_dict:
+                for cn in data_dict['CNList']:
+                    for pair in data_dict['PairList']:
+                        pair_dict = [{'data': data_dict['data'], 'type_im': copy.copy(pair[0]), 'cn': cn},
+                                     {'data': data_dict['data'], 'type_im': copy.copy(pair[1]), 'cn': cn}]
+                        if 'Spacing' in data_dict:
+                            pair_dict[0]['spacing'] = copy.copy(data_dict['Spacing'])
+                            pair_dict[1]['spacing'] = copy.copy(data_dict['Spacing'])
+                        im_info_list.append(pair_dict)
+
+        elif read_pair_mode == 'synthetic':
+            for data_dict in clean_data_exp_dict:
+                for cn in data_dict['CNList']:
+                    for type_im in data_dict['TypeImList']:
+                        for dsmooth in data_dict['DSmoothList']:
+                            im_info_moving = {'data': data_dict['data'], 'type_im': type_im, 'cn': cn}
+                            if 'DeformMethods' in setting['deform_exp'][data_dict['deform_exp']].keys():
+                                deform_methods = copy.deepcopy(setting['deform_exp'][data_dict['deform_exp']]['DeformMethods'])
+                                deform_method = deform_methods[dsmooth % len(deform_methods)]
+                                deform_number = get_deform_number_from_dsmooth(setting, dsmooth, deform_exp=data_dict['deform_exp'])
+                                im_info_moving['deform_exp'] = data_dict['deform_exp']
+                                im_info_moving['dsmooth'] = dsmooth
+                                im_info_moving['deform_method'] = deform_method
+                                im_info_moving['deform_number'] = deform_number
+
+                            if 'DeformedImExt' in data_dict.keys():
+                                im_info_moving['deformed_im_ext'] = data_dict['DeformedImExt']
+                            if 'stage' in setting.keys() or stage is not None:
+                                if stage is None:
+                                    stage = setting['stage']
+                                im_info_moving['stage'] = stage
+                                if 'PadTo' in setting.keys():
+                                    if 'stage' + str(stage) in setting['PadTo'].keys():
+                                        im_info_moving['padto'] = setting['PadTo']['stage' + str(stage)]
+                            if 'Spacing' in data_dict.keys():
+                                im_info_moving['spacing'] = data_dict['Spacing']
+
+                            im_info_fixed = copy.deepcopy(im_info_moving)
+                            # im_info_fixed = {'data': data_dict['data'], 'type_im': type_im, 'cn': cn}
+                            # if 'Spacing' in data_dict:
+                            #     im_info_fixed['spacing'] = copy.copy(data_dict['Spacing'])
+                            pair_dict = [im_info_fixed, im_info_moving]
+                            im_info_list.append(pair_dict)
+
+    else:
+        raise ValueError("load_mode should be in ['Single', 'Pair'], but it is set to"+train_mode)
+    return im_info_list
+
+
+def get_pair_info_list_from_train_mode_random(setting, train_mode, stage, load_mode='Single'):
+    """
+    needs to be updated in future
+    :param setting:
+    :param train_mode: 'Training', ' Validation', 'Testing', 'Training+Validation'
+    :param stage:
+    :return:
+    """
+    if train_mode in ['Training', 'Training+Validation']:
+        pair_info_training_list = get_im_info_list_from_train_mode(setting, train_mode='Training', load_mode=load_mode, stage=stage)
+        random_state = np.random.RandomState(0)
+        pair_info_list_copy = copy.deepcopy(pair_info_training_list)
+        random_indices = random_state.permutation(len(pair_info_list_copy))
+        pair_info_training_list = [pair_info_list_copy[i] for i in random_indices]
+        if train_mode == 'Training':
+            pair_info_list = pair_info_training_list
+
+    if train_mode in ['Validation', 'Training+Validation']:
+        pair_info_validation_list = get_im_info_list_from_train_mode(setting, train_mode='Validation', load_mode=load_mode, stage=stage)
+        random_state = np.random.RandomState(0)
+        pair_info_list_copy = copy.deepcopy(pair_info_validation_list)
+        random_indices = random_state.permutation(len(pair_info_list_copy))
+        pair_info_validation_list = [pair_info_list_copy[i] for i in random_indices[0:setting['NetworkValidation']['NumberOfImagesPerChunk']]]
+        if train_mode == 'Validation':
+            pair_info_list = pair_info_validation_list
+        else:
+            pair_info_list = pair_info_training_list + pair_info_validation_list
+
+    if train_mode == 'Testing':
+        pair_info_list = get_im_info_list_from_train_mode(setting, train_mode='Testing', load_mode=load_mode, stage=stage)
+
+    if setting['reverse_order']:
+        pair_info_list = pair_info_list[::-1]
+
+    return pair_info_list
+
+
+def load_suggested_class_balanced(setting):
+    max_deform = 0
+    for deform_exp in setting['DeformExpList']:
+        max_deform = max(max_deform, setting['deform_exp'][deform_exp]['MaxDeform'])
+    if max_deform <= 5:
+        class_balanced = [max_deform]
+    elif 5 < max_deform <= 7:
+        class_balanced = [2, max_deform]
+    elif 7 < max_deform <= 15:
+        class_balanced = [1.5, 4, max_deform]
+    elif 15 < max_deform <= 25:
+        class_balanced = [1.5, 8, max_deform]
+    else:
+        raise ValueError('class_balanced are not in the defined ranges: please define the new range')
+    return class_balanced
+
+
+def repeat_dsmooth_numbers(dsmooth_unique_list, deform_exp, repeat):
+    """
+    get the dsmooth_unique_list and repeat it:
+    example: assume that deform_exp['DeformMethods'] = ['respiratory_motion',
+                                                        'single_frequency',
+                                                        'mixed_frequency',
+                                                        'zero']
+    and dsmooth_unique_list = [0] which means that one type of respiratory motion is included and [1, 2, 3] is not included
+    in this example andy dsmooth number with dsmooth%4 == 1 is another respiratory motion but with different seed for randomness:
+    repeat_dsmooth_numbers(dsmooth_unique_list, deform_exp, 3)
+            $ [0, 4, 9]
+
+    :param dsmooth_unique_list:
+    :param deform_exp:
+    :param repeat:
+    :return: dsmooth_list
+    """
+    deform_exp_dict = load_deform_exp_setting(deform_exp)
+    number_of_unique_dsmooth = len(deform_exp_dict['DeformMethods'])
+    dsmooth_list = []
+    for r in range(repeat):
+        dsmooth_list = dsmooth_list + [i+r*number_of_unique_dsmooth for i in dsmooth_unique_list]
+    return dsmooth_list
+
+
+def dsmoothlist_by_deform_exp(deform_exp, ag_mode):
+    """
+    Automatically extract the selected artificial generations for training and validation set:
+        'Resp': ['respiratory_motion', 'single_frequency', 'mixed_frequency', 'zero'],
+        'NoResp': ['single_frequency', 'mixed_frequency', 'zero'],
+        'SingleOnly': ['single_frequency'],
+        'MixedOnly': ['mixed_frequency'],
+        'SingleResp': ['single_frequency', 'respiratory_motion', 'zero'],
+    please note that for validation set we do not need to select all of them
+    :param deform_exp:
+    :param ag_mode: artificial generation mode: 'Resp', 'NoResp', 'SingleOnly', 'MixedOnly', 'SingleResp', 'Visualization'
+    :return:
+    """
+    if ag_mode not in ['Resp', 'NoResp', 'SingleOnly', 'MixedOnly', 'SingleResp', 'Visualization']:
+        raise ValueError("exp_mode should be in ['Resp', 'NoResp', 'SingleOnly', 'MixedOnly', 'SingleResp', 'Visualization']")
+    dsmoothlist_training = []
+    dsmoothlist_validation = []
+    deform_exp_setting = load_deform_exp_setting(deform_exp)
+    all_deform_methods = deform_exp_setting['DeformMethods']
+    comp_dict = {'Resp': ['respiratory_motion', 'single_frequency', 'mixed_frequency', 'zero'],
+                 'NoResp': ['single_frequency', 'mixed_frequency', 'zero'],
+                 'SingleOnly': ['single_frequency'],
+                 'MixedOnly': ['mixed_frequency'],
+                 'SingleResp': ['single_frequency', 'respiratory_motion', 'zero'],
+                 'Visualization': []
+                 }
+    for i, deform_method in enumerate(all_deform_methods):
+        if deform_method in comp_dict[ag_mode]:
+            dsmoothlist_training.append(i)
+
+    if deform_exp in ['3D_max7_D14_K', '3D_max15_D14_K', '3D_max20_D14_K', '3D_max15_SingleFrequency_Visualization']:
+        if ag_mode == 'Resp':
+            dsmoothlist_validation = [0, 5, 10]
+        elif ag_mode == 'NoResp':
+            dsmoothlist_validation = [5, 8, 10]
+        elif ag_mode == 'SingleResp':
+            dsmoothlist_validation = [4, 8, 10]
+        elif ag_mode == 'SingleOnly':
+            dsmoothlist_validation = [5, 6, 8]
+        elif ag_mode == 'MixedOnly':
+            dsmoothlist_validation = [9, 10, 12]
+
+    else:
+        raise ValueError('dsmoothlist_validation not found for deform_exp='+deform_exp+', please add it manually')
+    return dsmoothlist_training, dsmoothlist_validation
+
+
+def check_setting(setting):
+    for deform_exp in setting['DeformExpList']:
+        if setting['ClassBalanced'][-1] > setting['deform_exp'][deform_exp]['MaxDeform']:
+            raise ValueError("setting['ClassBalanced'][-1] = {} should be smaller or equal to max(setting['MaxDeform']) = {}  ".format(
+                setting['ClassBalanced'][-1], max(setting['MaxDeform'])))
+    if (setting['R']-setting['Ry']) < 0:
+        raise ValueError("setting['R'] = {} should be greater or equal to setting['Ry'] = {}  ".format(
+            setting['R'], setting['Ry']))
+    if 'Randomness' in setting:
+        if not setting['Randomness']:
+            logging.warning('----!!!!!! setting["Randomness"] is set to False, network might not be trained correctly')
+    if not setting['ParallelSearching']:
+        logging.warning('----!!!!!! setting["ParallelSearching"] is set to False, running might be very slow')
+    if not setting['ParallelGeneration1stEpoch']:
+        logging.warning('----!!!!!! setting["ParallelGeneration1stEpoch"] is set to False, running might be very slow')
+
+    if setting['DetailedNetworkSummary']:
+        logging.warning('----!!!!!! setting["DetailedNetworkSummary"] is set to True, running might be very slow')
+
+    im_list_info = get_im_info_list_from_train_mode(setting, train_mode='Training')
+    number_of_images_last_chunk = len(im_list_info) % setting['NetworkTraining']['NumberOfImagesPerChunk']
+    logging.warning('number of images in the last chunk='+str(number_of_images_last_chunk))
+    if 0 < number_of_images_last_chunk < 10:
+        logging.warning('----!!!! Small number of images are left for the last chunk. Total number of images in the Training='+str(len(im_list_info)) +
+                        ' and NumberOfImagesPerChunk='+str(setting['NetworkTraining']['NumberOfImagesPerChunk']) +
+                        ', number of images in the last chunk='+str(number_of_images_last_chunk))
+
+    for i_dict, data_exp_dict1 in enumerate(setting['DataExpDict']):
+        for key in data_exp_dict1.keys():
+            if 'DeformedImExt' in key:
+                for i_ext, deformed_im_ext in enumerate(data_exp_dict1[key]):
+                    if deformed_im_ext not in ['Clean', 'Noise', 'Sponge', 'Occluded']:
+                        raise ValueError("DeformedImExt should be in ['Clean', 'Noise', 'Sponge', 'Occluded']," +
+                                         "but in data_exp_dict["+str(i_dict)+"]['"+key+"'] it is set to "+deformed_im_ext)
+                    if i_ext == 0:
+                        if deformed_im_ext != 'Clean':
+                            raise ValueError("The first one in DeformedImExt should be 'Clean'" +
+                                             "but in data_exp_dict[" + str(i_dict) + "]['" + key + "'] it is set to " + deformed_im_ext)
+
+    if setting['NetworkDesign'] == 'crop5_connection' and setting['stage'] != 4:
+        raise ValueError('in '+setting['NetworkDesign']+', the stage should be set to 4 but it is set to '+str(setting['stage']))
+
+
+def write_setting(setting, setting_address=None):
+    """
+    Write the setting dictionary to a json file.
+    :param setting:
+    :param setting_address: if the setting address is not given, it choose it automatically.
+           It does not overwrite if already a setting file exists in that direcotry.
+           starts from 'setting0.txt' and increase the integer to find a free name.
+    :return:
+    """
+    if setting_address is None:
+        setting_folder = address_generator(setting, 'ModelFolder')
+        setting_name = 'setting'
+        if not os.path.isdir(setting_folder):
+            os.makedirs(setting_folder)
+        setting_number = 0
+        setting_address = setting_folder + setting_name + str(setting_number) + '.txt'
+        while os.path.isfile(setting_address):
+            setting_number = setting_number + 1
+            setting_address = setting_folder + setting_name + str(setting_number) + '.txt'
+
+    with open(setting_address, 'w') as file:
+        file.write(json.dumps(setting, sort_keys=True, indent=4, separators=(',', ': ')))
+
+
+def load_network(setting, loaded_network):
+    model_folder = address_generator(setting, 'ModelFolder', current_experiment=loaded_network['NetworkLoad'])
+    setting_address = model_folder + 'setting0.txt'
+    log_im_address = model_folder + 'log_im.txt'
+
+    if 'BatchSize' in loaded_network.keys():
+        if loaded_network['BatchSize'] == 'Auto':
+            with open(setting_address, 'r') as f:
+                setting_loaded = json.load(f)
+            loaded_network['BatchSize'] = setting_loaded['NetworkTraining']['BatchSize']
+            logging.info('Loading Network:'+loaded_network['NetworkLoad']+', BatchSize='+str(loaded_network['BatchSize']))
+
+    loaded_network['GlobalStepLoad'] = get_global_step(setting, loaded_network['GlobalStepLoad'], loaded_network['NetworkLoad'])
+
+    if 'semi_epoch_load' in loaded_network.keys():
+        if loaded_network['semi_epoch_load'] == 'Auto':
+            with open(log_im_address, "r") as text_string:
+                log_im = text_string.read()
+            semi_epoch = 0
+            for line in log_im.splitlines()[::-1]:
+                if 'SemiEpoch' in line:
+                    semi_epoch = int((line.split('SemiEpoch=')[1]).split(',')[0])
+                    break
+            loaded_network['semi_epoch_load'] = semi_epoch + 1
+            logging.info('Loading Network:' + loaded_network['NetworkLoad'] + ', semi_epoch_load=' + str(loaded_network['semi_epoch_load']))
+
+    if 'itr_load' in loaded_network.keys():
+        if loaded_network['itr_load'] == 'Auto':
+            loaded_network['itr_load'] = int(int(loaded_network['GlobalStepLoad']) / loaded_network['BatchSize']) + 1
+            logging.info('Loading Network:' + loaded_network['NetworkLoad'] + ', itr_load=' + str(loaded_network['itr_load']))
+
+    return loaded_network
+
+
+def get_global_step(setting, requested_global_step, current_experiment):
+    """
+    get the global step of saver in order to load the requested network model:
+        'Last': search in the saved_folder to find the last network model
+        'Auto': use the global step defined in the function load_global_step_from_predefined_list()
+        '#Number' : otherwise the number that is requested will be used.
+    :param setting:
+    :param requested_global_step:
+    :param current_experiment:
+    :return: global_step
+    """
+    model_folder = address_generator(setting, 'ModelFolder', current_experiment=current_experiment)
+    saved_folder = model_folder + 'Saved/'
+
+    if requested_global_step == 'Last':
+        saved_itr_list = []
+        for file in os.listdir(saved_folder):
+            if file.endswith('meta'):
+                saved_itr_list.append(int(os.path.splitext(file.rsplit('-')[1])[0]))
+        global_step = str(max(saved_itr_list))
+        logging.info('Loading Network:' + current_experiment + ', GlobalStepLoad=' + global_step)
+
+    elif requested_global_step == 'Auto':
+        global_step = load_global_step_from_predefined_list(current_experiment)
+        logging.info('Loading Network:' + current_experiment + ', GlobalStepLoad=' + global_step)
+    else:
+        global_step = requested_global_step
+    return global_step

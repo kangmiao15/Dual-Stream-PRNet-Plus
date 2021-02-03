@@ -51,7 +51,7 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
 
     if data == 'DIR-Lab_4D':
         type_im_list = ['T00', 'T10', 'T20', 'T30', 'T40', 'T50', 'T60', 'T70', 'T80', 'T90']
-        data_folder_sub = data_folder + './4DCT/'
+        data_folder_sub = data_folder + '4DCT/'
         if cn == 1:
             im_img_name = 'Images/case' + str(cn) + '_' + type_im_list[type_im] + '_s.img'
         elif cn < 6:
@@ -60,16 +60,16 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
             im_img_name = 'Images/case' + str(cn) + '_' + type_im_list[type_im] + '.img'
         im_img_folder = data_folder_sub + 'Case' + str(cn) + 'Pack/'
         if cn == 8:
-            im_img_folder = data_folder_sub + 'Case' + str(cn) + 'Deploy/'
+            im_img_folder = data_folder_sub + 'Case8Pack/'+'Case' + str(cn) + 'Deploy/'
         im_mha_name = 'case' + str(cn) + '_' + type_im_list[type_im] + ext
         im_mha_folder = data_folder_sub + mha_folder_name + '/case' + str(cn) + '/'
         point_folder = data_folder_sub + point_folder_name + '/case' + str(cn) + '/'
         if cn < 6:
-            index_tr_old_address_list = [im_img_folder + '/Sampled4D/case' + str(cn) + '_4D-75_' + type_im_list[type_im] + '.txt',
-                                         im_img_folder + '/ExtremePhases/case' + str(cn) + '_300_' + type_im_list[type_im] + '_xyz.txt']
+            index_tr_old_address_list = [im_img_folder + 'Sampled4D/case' + str(cn) + '_4D-75_' + type_im_list[type_im] + '.txt',
+                                         im_img_folder + 'ExtremePhases/Case' + str(cn) + '_300_' + type_im_list[type_im] + '_xyz.txt']
         else:
-            index_tr_old_address_list = [im_img_folder + '/Sampled4D/case' + str(cn) + '_4D-75_' + type_im_list[type_im] + '.txt',
-                                         im_img_folder + '/ExtremePhases/case' + str(cn) + '_dirLab300_' + type_im_list[type_im] + '_xyz.txt']
+            index_tr_old_address_list = [im_img_folder + 'Sampled4D/case' + str(cn) + '_4D-75_' + type_im_list[type_im] + '.txt',
+                                         im_img_folder + 'ExtremePhases/Case' + str(cn) + '_dirLab300_' + type_im_list[type_im] + '_xyz.txt']
         index_tr_new_address_list = [point_folder + '/case' + str(cn) + '_4D-75_' + type_im_list[type_im] + '_xyz_tr.txt',
                                      point_folder + '/case' + str(cn) + '_300_' + type_im_list[type_im] + '_xyz_tr.txt']
         index_elx_new_address_list = [point_folder + '/case' + str(cn) + '_4D-75_' + type_im_list[type_im] + '_xyz_elx.txt',
@@ -104,12 +104,15 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
         os.makedirs(point_folder)
     im_img_address = im_img_folder + im_img_name
     im_mha_address = im_mha_folder + im_mha_name
-    if not os.path.isfile(im_mha_address):
+
+    if os.path.isfile(im_mha_address):
         # 1,2) reading image:----------------------------------------------------------------
         fid = open(im_img_address, 'rb')
         im_data = np.fromfile(fid, np.int16)
+        # import pdb; pdb.set_trace()
         image_old = im_data.reshape(dirlab_header['case' + str(cn)]['Size'][::-1])
-        image_old = np.flip(image_old, axis=0)  # The superior-inferior axis needs to be flipped
+        # image_old = np.flip(image_old, axis=0)  # The superior-inferior axis needs to be flipped
+        # 94 * 256 * 256
         origin = [0, 0, 0]
         image = copy.deepcopy(image_old)
         # reading landmarks:
@@ -122,12 +125,16 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
                 index_tr_old_raw = np.loadtxt(index_tr_old_address)
                 # 4a&b) The superior-inferior axis is flipped. be careful about that indices start at 1. after converting to zero-start,
                 #  there is no -1 in the SI direction.
-
-                index_tr_old = np.array([[index_tr_old_raw[i, 0] - 1,
-                                          index_tr_old_raw[i, 1] - 1,
-                                          image_old.shape[0] - index_tr_old_raw[i, 2]]
-                                         for i in range(index_tr_old_raw.shape[0])])
-
+                # index_tr_old_raw 256 * 256 * 94
+                # index_tr_old = np.array([[index_tr_old_raw[i, 0] - 1,
+                #                           index_tr_old_raw[i, 1] - 1,
+                #                           image_old.shape[0] - index_tr_old_raw[i, 2]]
+                #                          for i in range(index_tr_old_raw.shape[0])])
+                # flip landmarks as data
+                index_tr_old = np.array([[index_tr_old_raw[i, 2] - 1,
+                            index_tr_old_raw[i, 0] - 1,
+                            index_tr_old_raw[i, 1] - 1]
+                            for i in range(index_tr_old_raw.shape[0])])
                 # 3) remove empty slices only in DIR-Lab_COPD-----------------------------------------
                 if data == 'DIR-Lab_COPD':
                     image, slices_to_remove = remove_empty_slices(image_old)
@@ -143,7 +150,7 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
                     index_tr_new = index_tr_old.copy()
                     number_of_landmarks = index_tr_new.shape[0]
                 np.savetxt(index_tr_new_address, index_tr_new, fmt='%d')
-                point_tr_new = ip.index_to_world(index_tr_new, spacing=dirlab_header['case' + str(cn)]['Spacing'], origin=origin)
+                point_tr_new = ip.index_to_world(index_tr_new, spacing=dirlab_header['case' + str(cn)]['Spacing'][::-1], origin=origin)
                 np.savetxt(point_tr_new_address, point_tr_new, fmt='%-9.3f')
                 open_text = open(index_tr_new_address, "r")
                 # number_of_landmarks = index_tr_new.shape[0]
@@ -249,7 +256,7 @@ def dirlab_4dct_header():
 def main():
     data = 'DIR-Lab_4D'
     # data = 'DIR-Lab_COPD'
-    data_folder = './'
+    data_folder = '/media/ubuntu/DISK2/code/local/DIR-Lab-data-process/DIR-Lab/'
     for cn in range(1, 11):
         for type_im in range(0,10):
             img_converter(data_folder=data_folder, data=data, type_im=type_im, cn=cn)

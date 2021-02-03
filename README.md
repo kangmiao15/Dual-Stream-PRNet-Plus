@@ -3,6 +3,7 @@
 Code for Dual-Stream PRNet++  
 
 ## build correlation_cuda  
+  cuda==10.1, torch=1.40
   cd ./correlation_package  
   rm -rf *_cuda.egg-info build dist __pycache__  
   python3 setup.py install --user  
