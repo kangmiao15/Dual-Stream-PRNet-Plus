@@ -59,7 +59,7 @@ def root_address_generator(where_to_run='Auto'):
             data_folder = 'E:/PHD/Database/'
         elif sys.platform == 'linux':
             root_folder = './'
-            data_folder = '/media/ubuntu/DISK2/code/local/DIR-Lab-data-process/DIR-Lab/'
+            data_folder = '/data1/km/Dual-Stream-PRNet-Plus/data/'
         else:
             raise ValueError('sys.platform is only defined in ["win32"]. Please defined new os in setting.setting_utils.root_address_generator()')
     elif where_to_run == 'Cluster':

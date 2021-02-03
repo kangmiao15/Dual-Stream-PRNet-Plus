@@ -149,14 +149,14 @@ if __name__ == '__main__':
     args = parse_args()
     print('gpu', args.gpu)
     
-    # build dataset
+    #rp_label_left build dataset
     # trans_data = [ CenterCroplandmarks(dst_size=(96,256,256)) ]
     trans_data = [ Padlandmarks(dst_size=(96,256,256)) ]
     trans_pair = []
     data_list = [ ("case%d" % (args.fold) , "T%02d" % j) for j in [0, 50]]
     print(data_list)
-    dataset = DIRLabDataset(args.data_root, data_list, trans_data, with_label=True)
-    dataset = PairDataset(dataset, None, trans_pair, with_label=True, data_name='dirlab')
+    dataset_dir = DIRLabDataset(args.data_root, data_list, trans_data, with_label=True)
+    dataset = PairDataset(dataset_dir, None, trans_pair, with_label=True, data_name='dirlab')
 
     num_pair = len(dataset)
     print("number of pair: %d" % num_pair)
@@ -181,25 +181,26 @@ if __name__ == '__main__':
         pred_left, flow, offset_list, warp_label_left = net_forward(net, data_left, data_right, label_right, args.gpu)
         # compute TRE
         case_num = 'case' + str(args.fold)
-        img_spacing = [2.5, 1.0, 1.0]
+        img_spacing = np.array([2.5, 1.0, 1.0])
         raw_shape = np.flip(dir_info[case_num]['Size'])
-        resize_factor = data_left.shape / raw_shape #new_spacing
+        resize_factor = dataset_dir.data_shape / raw_shape #new_spacing
         # resize the landmark
         label_left = label_left * resize_factor
         label_right = label_right * resize_factor
-
+        label_right = label_right.detach().numpy().copy()
+        label_left = label_left.detach().numpy().copy()
         #flow sampling
         ref_lmk_index = np.round(label_right).astype('int32')
-
         label_warp = label_right.copy()
         for i in range(300):
             wi, hi, di = ref_lmk_index[i]
-            w0, h0, d0 = flow[0, :, di, hi, wi]
+            w0, h0, d0 = flow[:, wi, hi, di]
             label_warp[i] += [w0, h0, d0]
         #    break
             
         # compute TRE
         #no reg
+        import pdb; pdb.set_trace()
         tre_mean_bf, tre_std_bf, diff_br = compute_tre(label_left, label_right, img_spacing)
         print('TRE-before reg, mean: {:.2f},std: {:.2f}'.format(
                 tre_mean_bf, tre_std_bf))
@@ -215,8 +216,8 @@ if __name__ == '__main__':
         data_left = (data_left*255).astype(np.uint8)
         data_right = data_right.numpy()
         data_right = (data_right*255).astype(np.uint8)
-        label_right = label_right.numpy().astype(np.uint8)
-        label_left = label_left.numpy().astype(np.uint8)
+        label_right = label_right.astype(np.uint32)
+        label_left = label_left.astype(np.uint32)
         pred_left = (pred_left*255).astype(np.uint8)
 
         # offset_list = [ vis_flow(offset) for offset in offset_list ]

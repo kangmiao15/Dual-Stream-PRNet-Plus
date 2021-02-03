@@ -33,6 +33,7 @@ class DIRLabDataset(Dataset):
         # load raw data
         data = sitk.ReadImage(data_path)
         data = sitk.GetArrayFromImage(data)
+        self.data_shape = data.shape
         # normalization
         data = data.astype(np.float32)
         data = np.clip(data, -1000, 400)

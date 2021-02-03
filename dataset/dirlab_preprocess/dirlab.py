@@ -60,7 +60,7 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
             im_img_name = 'Images/case' + str(cn) + '_' + type_im_list[type_im] + '.img'
         im_img_folder = data_folder_sub + 'Case' + str(cn) + 'Pack/'
         if cn == 8:
-            im_img_folder = data_folder_sub + 'Case8Pack/'+'Case' + str(cn) + 'Deploy/'
+            im_img_folder = data_folder_sub + 'Case' + str(cn) + 'Deploy/'
         im_mha_name = 'case' + str(cn) + '_' + type_im_list[type_im] + ext
         im_mha_folder = data_folder_sub + mha_folder_name + '/case' + str(cn) + '/'
         point_folder = data_folder_sub + point_folder_name + '/case' + str(cn) + '/'
@@ -104,10 +104,10 @@ def img_converter(data_folder, data, type_im, cn, ext='.mha', mha_folder_name='m
         os.makedirs(point_folder)
     im_img_address = im_img_folder + im_img_name
     im_mha_address = im_mha_folder + im_mha_name
-
-    if os.path.isfile(im_mha_address):
+    if not os.path.isfile(im_mha_address):
         # 1,2) reading image:----------------------------------------------------------------
         fid = open(im_img_address, 'rb')
+        print(im_img_address)
         im_data = np.fromfile(fid, np.int16)
         # import pdb; pdb.set_trace()
         image_old = im_data.reshape(dirlab_header['case' + str(cn)]['Size'][::-1])
@@ -256,7 +256,7 @@ def dirlab_4dct_header():
 def main():
     data = 'DIR-Lab_4D'
     # data = 'DIR-Lab_COPD'
-    data_folder = '/media/ubuntu/DISK2/code/local/DIR-Lab-data-process/DIR-Lab/'
+    data_folder = '/data1/km/Dual-Stream-PRNet-Plus/data/'
     for cn in range(1, 11):
         for type_im in range(0,10):
             img_converter(data_folder=data_folder, data=data, type_im=type_im, cn=cn)
