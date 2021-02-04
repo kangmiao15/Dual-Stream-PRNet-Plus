@@ -122,20 +122,21 @@ class CropPadlandmarks:
         num_points = landmark.shape[0]
         new_landmarks = []
 
-        for i in range(num_points):
-            d = landmark[i, 0]
-            h = landmark[i, 1]
-            w = landmark[i, 2]
-            cond1 = d < D_start or d >= D_end
-            cond2 = h < H_start or h >= H_end
-            cond3 = w < W_start or w >= W_end
-            if cond1 or cond2 or cond3:
-                print('elimilate the landmark:', (d, h, w))
-            else:
-                new_landmarks.append([d, h, w])
-        new_landmarks = np.array(new_landmarks)
-        new_landmarks = new_landmarks - np.array([D_start, H_start, W_start])
-        return [ volume[D_start:D_end, H_start:H_end, W_start:W_end].copy(), new_landmarks]
+        # for i in range(num_points):
+        #     d = landmark[i, 0]
+        #     h = landmark[i, 1]
+        #     w = landmark[i, 2]
+        #     cond1 = d < D_start or d >= (D_end-1)
+        #     cond2 = h < H_start or h >= (H_end-1)
+        #     cond3 = w < W_start or w >= (W_end-1)
+        #     if cond1 or cond2 or cond3:
+        #         print('elimilate the landmark:', (d, h, w))
+        #     else:
+        #         new_landmarks.append([d, h, w])
+        # new_landmarks = np.array(new_landmarks)
+        # new_landmarks = new_landmarks - np.array([D_start, H_start, W_start])
+        print([D_start, H_start, W_start])
+        return [ volume[D_start:D_end, H_start:H_end, W_start:W_end].copy(), [D_start, H_start, W_start]]
 
     def center_crop_idx(self, org, dst):
         center = org/2.0

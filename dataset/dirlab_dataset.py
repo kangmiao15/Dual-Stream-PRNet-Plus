@@ -39,16 +39,13 @@ class DIRLabDataset(Dataset):
         data = np.clip(data, -1000, 400)
         data = (data-data.min())/(data.max()-data.min())
 
+        for trans in self.trans:
+            data, self.delta = trans(data)
         if self.with_label:
             label = np.loadtxt(label_path)
             # change to (D, H, W) as data shape
             label = np.stack([label[:, 2], label[:, 0], label[:, 1]], axis=1)
-            for trans in self.trans:
-                data, label = trans(data, label)
-            data = [ data, label ]
-        else:
-            for trans in self.trans:
-                data = trans(data)
+            data = [data, label]
         return data
 
 

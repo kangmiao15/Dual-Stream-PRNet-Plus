@@ -148,19 +148,37 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     print('gpu', args.gpu)
-    
     #rp_label_left build dataset
     trans_data = [ CropPadlandmarks(dst_size=(96,224,224)) ]
     # trans_data = [ Padlandmarks(dst_size=(96,256,256)) ]
     trans_pair = []
     data_list = [ ("case%d" % (args.fold) , "T%02d" % j) for j in [0, 50]]
     print(data_list)
-    dataset_dir = DIRLabDataset(args.data_root, data_list, trans_data, with_label=True)
-    dataset = PairDataset(dataset_dir, None, trans_pair, with_label=True, data_name='dirlab')
+    dataset_dir = DIRLabDataset(args.data_root, data_list, trans_data, with_label=False)
+    dataset = PairDataset(dataset_dir, None, trans_pair, with_label=False, data_name='dirlab')
+    data_left, data_right = dataset[0]
+    # fetch data
+    if args.fold in range(1, 6):
+        lmk_path = args.data_root + 'Case%gPack/ExtremePhases/' % args.fold
+        mov_lmk_fname = 'Case%g_300_T00_xyz.txt' % args.fold
+        ref_lmk_fname = 'Case%g_300_T50_xyz.txt' % args.fold
+    else:
+        lmk_path = args.data_root + 'Case%gPack/extremePhases/' % args.fold
+        mov_lmk_fname = 'case%g_dirLab300_T00_xyz.txt' % args.fold
+        ref_lmk_fname = 'case%g_dirLab300_T50_xyz.txt' % args.fold
 
-    num_pair = len(dataset)
-    print("number of pair: %d" % num_pair)
-
+    label_left = np.loadtxt(os.path.join(lmk_path,mov_lmk_fname), dtype=int)
+    label_right = np.loadtxt(os.path.join(lmk_path,ref_lmk_fname), dtype=int)
+    label_left = np.stack([label_left[:, 2], label_left[:, 0], label_left[:, 1]], axis=1)
+    label_right = np.stack([label_right[:, 2], label_right[:, 0], label_right[:, 1]], axis=1)
+    dir_info = dirlab_4dct_header()
+    case_num = 'case' + str(args.fold)
+    img_spacing = np.array([2.5, 1.0, 1.0])
+    raw_shape = np.flip(dir_info[case_num]['Size'])
+    resize_factor = dataset_dir.data_shape / raw_shape #new_spacing
+    # resize the landmark
+    label_right = (label_left-1) * resize_factor - dataset.delta
+    label_right = (label_right-1) * resize_factor- dataset.delta
     # build network
     net, _ = build_network(args.net)
     print('# net parameters:', sum(param.numel() for param in net.parameters()))
@@ -168,74 +186,54 @@ if __name__ == '__main__':
     if args.gpu:
         print('GPU')
         net = net.cuda()
-    # testing 
-    random_idx = list(range(num_pair))
-    dir_info = dirlab_4dct_header()
-    for i in random_idx[0:1]:
-        print("processing %d" % i)
-        # fetch data
-        data_left, data_right = dataset[i]
-        data_left, label_left = data_left
-        data_right, label_right = data_right
-        #label_right to get the warped position 
-        pred_left, flow, offset_list, warp_label_left = net_forward(net, data_left, data_right, label_right, args.gpu)
-        # compute TRE
-        case_num = 'case' + str(args.fold)
-        img_spacing = np.array([2.5, 1.0, 1.0])
-        raw_shape = np.flip(dir_info[case_num]['Size'])
-        resize_factor = dataset_dir.data_shape / raw_shape #new_spacing
-        # resize the landmark
-        label_left = label_left * resize_factor
-        label_right = label_right * resize_factor
-        label_right = label_right.detach().numpy().copy()
-        label_left = label_left.detach().numpy().copy()
-        #flow sampling
-        ref_lmk_index = np.round(label_right).astype('int32')
-        label_warp = label_right.copy()
-        for i in range(300):
-            wi, hi, di = ref_lmk_index[i]
-            w0, h0, d0 = flow[:, wi, hi, di]
-            label_warp[i] += [w0, h0, d0]
-        #    break
-            
-        # compute TRE
-        #no reg
-        import pdb; pdb.set_trace()
-        tre_mean_bf, tre_std_bf, diff_br = compute_tre(label_left, label_right, img_spacing)
-        print('TRE-before reg, mean: {:.2f},std: {:.2f}'.format(
-                tre_mean_bf, tre_std_bf))
-        #with reg
-        tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
-        print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(
-                tre_mean_af, tre_std_af))
+    pred_left, flow, offset_list, warp_label_left = net_forward(net, data_left, data_right, label_right, args.gpu)
+    # compute TRE
+    ref_lmk_index = np.round(label_right).astype('int32')
+    label_warp = label_right.copy()
+    for i in range(300):
+        wi, hi, di = ref_lmk_index[i]
+        w0, h0, d0 = flow[:, wi, hi, di]
+        label_warp[i] += [w0, h0, d0]
+    #    break
+        
+    # compute TRE
+    #no reg
+    import pdb; pdb.set_trace()
+    tre_mean_bf, tre_std_bf, diff_br = compute_tre(label_left, label_right, img_spacing)
+    print('TRE-before reg, mean: {:.2f},std: {:.2f}'.format(
+            tre_mean_bf, tre_std_bf))
+    #with reg
+    tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
+    print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(
+            tre_mean_af, tre_std_af))
 
-        if args.vis is False:
-            continue
-        # to numpy
-        data_left = data_left.numpy()
-        data_left = (data_left*255).astype(np.uint8)
-        data_right = data_right.numpy()
-        data_right = (data_right*255).astype(np.uint8)
-        label_right = label_right.astype(np.uint32)
-        label_left = label_left.astype(np.uint32)
-        pred_left = (pred_left*255).astype(np.uint8)
+    if args.vis is False:
+        continue
+    # to numpy
+    data_left = data_left.numpy()
+    data_left = (data_left*255).astype(np.uint8)
+    data_right = data_right.numpy()
+    data_right = (data_right*255).astype(np.uint8)
+    label_right = label_right.astype(np.uint32)
+    label_left = label_left.astype(np.uint32)
+    pred_left = (pred_left*255).astype(np.uint8)
 
-        # offset_list = [ vis_flow(offset) for offset in offset_list ]
-        # flow = vis_flow(flow)
-        # data_left_org = draw_label(data_left, label_left)
-        # data_right = draw_label(data_right, label_right)
-        # data_left_antwarp = draw_label(pred_left, warp_label_left)
-        # pred_closing = draw_label(pred_left, warp_label_left_closing)
-        for j in range(0, data_left.shape[0]):
-            result = np.concatenate([data_left[j, ...], data_right[j, ...], pred_left[j, ...]], axis=1)
-            # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
-            print(data_left.shape)
-            result = cv2.resize(result, None, fx=2, fy=2)
-            # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
-            # delta = cv2.resize(delta, None, fx=2, fy=2)
-            #cv2.imshow("delta", delta)
-            cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)
-            # cv2.imshow("result", result)
-            #cv2.imshow("flow", cv2.resize(flow[j, ...], None, fx=2, fy=2))
-            # cv2.waitKey()
-    
+    # offset_list = [ vis_flow(offset) for offset in offset_list ]
+    # flow = vis_flow(flow)
+    # data_left_org = draw_label(data_left, label_left)
+    # data_right = draw_label(data_right, label_right)
+    # data_left_antwarp = draw_label(pred_left, warp_label_left)
+    # pred_closing = draw_label(pred_left, warp_label_left_closing)
+    for j in range(0, data_left.shape[0]):
+        result = np.concatenate([data_left[j, ...], data_right[j, ...], pred_left[j, ...]], axis=1)
+        # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
+        print(data_left.shape)
+        result = cv2.resize(result, None, fx=2, fy=2)
+        # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
+        # delta = cv2.resize(delta, None, fx=2, fy=2)
+        #cv2.imshow("delta", delta)
+        cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)
+        # cv2.imshow("result", result)
+        #cv2.imshow("flow", cv2.resize(flow[j, ...], None, fx=2, fy=2))
+        # cv2.waitKey()
+
