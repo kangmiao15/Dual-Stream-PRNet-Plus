@@ -204,36 +204,34 @@ if __name__ == '__main__':
             tre_mean_bf, tre_std_bf))
     #with reg
     tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
-    print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(
-            tre_mean_af, tre_std_af))
+    print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(tre_mean_af, tre_std_af))
 
     if args.vis is False:
-        continue
-    # to numpy
-    data_left = data_left.numpy()
-    data_left = (data_left*255).astype(np.uint8)
-    data_right = data_right.numpy()
-    data_right = (data_right*255).astype(np.uint8)
-    label_right = label_right.astype(np.uint32)
-    label_left = label_left.astype(np.uint32)
-    pred_left = (pred_left*255).astype(np.uint8)
+        # to numpy
+        data_left = data_left.numpy()
+        data_left = (data_left*255).astype(np.uint8)
+        data_right = data_right.numpy()
+        data_right = (data_right*255).astype(np.uint8)
+        label_right = label_right.astype(np.uint32)
+        label_left = label_left.astype(np.uint32)
+        pred_left = (pred_left*255).astype(np.uint8)
 
-    # offset_list = [ vis_flow(offset) for offset in offset_list ]
-    # flow = vis_flow(flow)
-    # data_left_org = draw_label(data_left, label_left)
-    # data_right = draw_label(data_right, label_right)
-    # data_left_antwarp = draw_label(pred_left, warp_label_left)
-    # pred_closing = draw_label(pred_left, warp_label_left_closing)
-    for j in range(0, data_left.shape[0]):
-        result = np.concatenate([data_left[j, ...], data_right[j, ...], pred_left[j, ...]], axis=1)
-        # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
-        print(data_left.shape)
-        result = cv2.resize(result, None, fx=2, fy=2)
-        # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
-        # delta = cv2.resize(delta, None, fx=2, fy=2)
-        #cv2.imshow("delta", delta)
-        cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)
-        # cv2.imshow("result", result)
-        #cv2.imshow("flow", cv2.resize(flow[j, ...], None, fx=2, fy=2))
-        # cv2.waitKey()
+        # offset_list = [ vis_flow(offset) for offset in offset_list ]
+        # flow = vis_flow(flow)
+        # data_left_org = draw_label(data_left, label_left)
+        # data_right = draw_label(data_right, label_right)
+        # data_left_antwarp = draw_label(pred_left, warp_label_left)
+        # pred_closing = draw_label(pred_left, warp_label_left_closing)
+        for j in range(0, data_left.shape[0]):
+            result = np.concatenate([data_left[j, ...], data_right[j, ...], pred_left[j, ...]], axis=1)
+            # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
+            print(data_left.shape)
+            result = cv2.resize(result, None, fx=2, fy=2)
+            # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
+            # delta = cv2.resize(delta, None, fx=2, fy=2)
+            #cv2.imshow("delta", delta)
+            cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)
+            # cv2.imshow("result", result)
+            #cv2.imshow("flow", cv2.resize(flow[j, ...], None, fx=2, fy=2))
+            # cv2.waitKey()
 
