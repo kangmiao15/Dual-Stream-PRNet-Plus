@@ -103,7 +103,7 @@ class CropPadlandmarks:
         self.rnd_offset = rnd_offset
     
 
-    def __call__(self, volume, landmark):
+    def __call__(self, volume):
         org_D, org_H, org_W = volume.shape
         dst_D, dst_H, dst_W = self.dst_size
         if dst_D > org_D:
@@ -119,8 +119,8 @@ class CropPadlandmarks:
         D_start, D_end = self.center_crop_idx(org_D, dst_D) 
         H_start, H_end = self.center_crop_idx(org_H, dst_H)
         W_start, W_end = self.center_crop_idx(org_W, dst_W)
-        num_points = landmark.shape[0]
-        new_landmarks = []
+        # num_points = landmark.shape[0]
+        # new_landmarks = []
 
         # for i in range(num_points):
         #     d = landmark[i, 0]
