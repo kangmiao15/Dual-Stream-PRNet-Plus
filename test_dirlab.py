@@ -144,19 +144,20 @@ if __name__ == '__main__':
         mov_lmk_fname = 'case%g_dirLab300_T00_xyz.txt' % args.fold
         ref_lmk_fname = 'case%g_dirLab300_T50_xyz.txt' % args.fold
 
-    label_left = np.loadtxt(os.path.join(lmk_path,mov_lmk_fname), dtype=int)
-    label_right = np.loadtxt(os.path.join(lmk_path,ref_lmk_fname), dtype=int)
-    import pdb;pdb.set_trace()
-    label_left = np.stack([label_left[:, 2], label_left[:, 0], label_left[:, 1]], axis=1)
-    label_right = np.stack([label_right[:, 2], label_right[:, 0], label_right[:, 1]], axis=1)
+    label_left_raw = np.loadtxt(os.path.join(lmk_path,mov_lmk_fname), dtype=int)
+    label_right_raw = np.loadtxt(os.path.join(lmk_path,ref_lmk_fname), dtype=int)
+    raw_tre = compute_tre(label_left_raw, label_right_raw, [1.0, 1.0, 2.5])
+    print('raw_tre', raw_tre)
+    label_left_raw = np.stack([label_left_raw[:, 2], label_left_raw[:, 0], label_left_raw[:, 1]], axis=1)
+    label_right_raw = np.stack([label_right_raw[:, 2], label_right_raw[:, 0], label_right_raw[:, 1]], axis=1)
     dir_info = dirlab_4dct_header()
     case_num = 'case' + str(args.fold)
     img_spacing = np.array([2.5, 1.0, 1.0])
     raw_shape = np.flip(dir_info[case_num]['Size'])
     resize_factor = dataset_dir.data_shape / raw_shape #new_spacing
     # resize the landmark
-    label_left = (label_left-1) * resize_factor - dataset_dir.delta
-    label_right = (label_right-1) * resize_factor- dataset_dir.delta
+    label_left = (label_left_raw-1) * resize_factor - dataset_dir.delta
+    label_right = (label_right_raw-1) * resize_factor- dataset_dir.delta
     # build network
     net, _ = build_network(args.net)
     print('# net parameters:', sum(param.numel() for param in net.parameters()))
@@ -182,7 +183,7 @@ if __name__ == '__main__':
     #with reg
     tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
     print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(tre_mean_af, tre_std_af))
-
+    import pdb;pdb.set_trace()
     if args.vis:
         # to numpy
         data_left = data_left.numpy()
@@ -193,20 +194,31 @@ if __name__ == '__main__':
         label_left = label_left.astype(np.uint32)
         label_warp = label_warp.astype(np.uint32)
         pred_left = (pred_left*255).astype(np.uint8)
-
+        with open('./data/4DCT/Case1Pack/Images/case1_T00_s.img', 'rb') as fid:
+            data_left_raw = np.fromfile(fid, np.int16)
+            data_left_raw = data_left_raw.reshape(dirlab_info[case_num]['Size'][::-1])
+        with open('./data/4DCT/Case1Pack/Images/case1_T50_s.img', 'rb') as fid:
+            data_right_raw = np.fromfile(fid, np.int16)
+            data_right_raw = data_right_raw.reshape(dirlab_info[case_num]['Size'][::-1])
+        
         # offset_list = [ vis_flow(offset) for offset in offset_list ]
         # flow = vis_flow(flow)
-        data_left_org = draw_label(data_left, label_left)
+        data_left_raw = draw_label(data_left_raw, label_left_raw)
+        data_right_raw = draw_label(data_right_raw, label_right_raw)
+        data_left = draw_label(data_left, label_left)
         data_right = draw_label(data_right, label_right)
         data_warp = draw_label(pred_left, label_warp)
         for j in range(0, data_left.shape[0]):
+            result_raw = np.concatenate(data_left_raw[j, ...], data_right_raw[j, ...])
             result = np.concatenate([data_left[j, ...], data_right[j, ...], data_warp[j, ...]], axis=1)
             # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
             result = cv2.resize(result, None, fx=2, fy=2)
+            result_raw = cv2.resize(result_raw, None, fx=2, fy=2)
             # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
             # delta = cv2.resize(delta, None, fx=2, fy=2)
             #cv2.imshow("delta", delta)
             cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)
+            cv2.imwrite('./temp/dir_result_raw_%s.jpg' % j, result_raw)
             # cv2.imshow("result", result)
             #cv2.imshow("flow", cv2.resize(flow[j, ...], None, fx=2, fy=2))
             # cv2.waitKey()
