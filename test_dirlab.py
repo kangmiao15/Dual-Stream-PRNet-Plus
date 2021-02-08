@@ -22,7 +22,7 @@ from skimage.morphology import closing, square, opening
 
 from dataset.dirlab_dataset import DIRLabDataset
 from dataset.pair_dataset import PairDataset
-from op.warp_flow import add_offset, revert_offset
+from op.warp_flow import add_offset, revert_offset, apply_offset
 # from op.interpn_landmarks import warp_landmarks
 from op.warp_flow import warp_landmarks
 from utils.visualization import vis_flow, label2color
@@ -68,6 +68,7 @@ def dirlab_4dct_header():
 
 def compute_tre(mov_lmk, ref_lmk, spacing):
     #TRE, unit: mm
+    print(spacing)
     diff = (ref_lmk - mov_lmk) * spacing
     diff = torch.Tensor(diff)
     tre = diff.pow(2).sum(1).sqrt()
@@ -84,12 +85,11 @@ def net_forward(net, data_warp, data_fix, label_warp, gpu):
     with torch.no_grad():
         # forward
         predict, flow, delta_list = net(data)
-        np.save('./dir_flow.npy', flow)
     predict = predict.squeeze()
     predict = predict.cpu().numpy()
     flow = flow.squeeze()
 
-    return predict, flow
+    return predict, flow, delta_list
 
 def draw_label(data, label):
     point_size = 1
@@ -97,11 +97,13 @@ def draw_label(data, label):
     thickness = 4 # 可以为 0 、4、8
     data = np.stack((data, data, data), axis=-1)
     # 要画的点的坐标
-    for point in label:
+    for i, point in enumerate(label):
         x = round(point[0])
         y = round(point[1])
         z = round(point[2])
         cv2.circle(data[x, :, :, :], (y,z), point_size, point_color, thickness)
+        text = str(i) + '_' + 'x%s_y%s_z%s'% (x, y, z)
+        cv2.putText(data[x, :, :, :], str(i), (y-20,z-10),cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1)
     return data
 
 def parse_args():
@@ -146,12 +148,13 @@ if __name__ == '__main__':
 
     label_left_raw = np.loadtxt(os.path.join(lmk_path,mov_lmk_fname), dtype=int)
     label_right_raw = np.loadtxt(os.path.join(lmk_path,ref_lmk_fname), dtype=int)
-    raw_tre = compute_tre(label_left_raw, label_right_raw, [1.0, 1.0, 2.5])
-    print('raw_tre', raw_tre)
-    label_left_raw = np.stack([label_left_raw[:, 2], label_left_raw[:, 0], label_left_raw[:, 1]], axis=1)
-    label_right_raw = np.stack([label_right_raw[:, 2], label_right_raw[:, 0], label_right_raw[:, 1]], axis=1)
     dir_info = dirlab_4dct_header()
     case_num = 'case' + str(args.fold)
+    raw_tre = compute_tre(label_left_raw, label_right_raw, dir_info[case_num]['Spacing'])
+    print('raw TRE-before reg, mean: {:.2f},std: {:.2f}'.format(
+            raw_tre[0], raw_tre[1]))
+    label_left_raw = np.stack([label_left_raw[:, 2], label_left_raw[:, 0], label_left_raw[:, 1]], axis=1)
+    label_right_raw = np.stack([label_right_raw[:, 2], label_right_raw[:, 0], label_right_raw[:, 1]], axis=1)
     img_spacing = np.array([2.5, 1.0, 1.0])
     raw_shape = np.flip(dir_info[case_num]['Size'])
     resize_factor = dataset_dir.data_shape / raw_shape #new_spacing
@@ -165,15 +168,16 @@ if __name__ == '__main__':
     if args.gpu:
         print('GPU')
         net = net.cuda()
-    pred_left, flow = net_forward(net, data_left, data_right, label_right, args.gpu)
+    pred_left, flow, delta_list = net_forward(net, data_left, data_right, label_right, args.gpu)
+    flow = revert_offset(flow.unsqueeze(0))
+    flow = flow.squeeze()
     # compute TRE
     ref_lmk_index = np.round(label_right).astype('int32')
     label_warp = label_right.copy()
     for i in range(300):
-        wi, hi, di = ref_lmk_index[i]
-        w0, h0, d0 = flow[:, wi, hi, di]
-        label_warp[i] += [w0, h0, d0]
-    #    break
+        di, hi, wi = ref_lmk_index[i]
+        h0, w0, d0= delta_list[-1][0, :, di, hi, wi]
+        label_warp[i] += [d0, h0, w0]
         
     # compute TRE
     #no reg
@@ -183,7 +187,6 @@ if __name__ == '__main__':
     #with reg
     tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
     print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(tre_mean_af, tre_std_af))
-    import pdb;pdb.set_trace()
     if args.vis:
         # to numpy
         data_left = data_left.numpy()
@@ -196,24 +199,31 @@ if __name__ == '__main__':
         pred_left = (pred_left*255).astype(np.uint8)
         with open('./data/4DCT/Case1Pack/Images/case1_T00_s.img', 'rb') as fid:
             data_left_raw = np.fromfile(fid, np.int16)
-            data_left_raw = data_left_raw.reshape(dirlab_info[case_num]['Size'][::-1])
+            data_left_raw = data_left_raw.reshape(dir_info[case_num]['Size'][::-1])
+            data_left_raw = data_left_raw.astype(np.float32)
+            data_left_raw = np.clip(data_left_raw, -1000, 400)
+            data_left_raw = (data_left_raw-data_left_raw.min())/(data_left_raw.max()-data_left_raw.min())
+            data_left_raw = (data_left_raw*255.0).astype(np.uint8)
         with open('./data/4DCT/Case1Pack/Images/case1_T50_s.img', 'rb') as fid:
             data_right_raw = np.fromfile(fid, np.int16)
-            data_right_raw = data_right_raw.reshape(dirlab_info[case_num]['Size'][::-1])
-        
-        # offset_list = [ vis_flow(offset) for offset in offset_list ]
+            data_right_raw = data_right_raw.reshape(dir_info[case_num]['Size'][::-1])
+            data_right_raw = data_right_raw.astype(np.float32)
+            data_right_raw = np.clip(data_right_raw, -1000, 400)
+            data_right_raw = (data_right_raw-data_right_raw.min())/(data_right_raw.max()-data_right_raw.min())
+            data_right_raw = (data_right_raw*255.0).astype(np.uint8)
         # flow = vis_flow(flow)
-        data_left_raw = draw_label(data_left_raw, label_left_raw)
-        data_right_raw = draw_label(data_right_raw, label_right_raw)
+        # offset_list = [ vis_flow(offset) for offset in offset_list ]
+        data_left_raw = draw_label(data_left_raw, label_left_raw-1)
+        data_right_raw = draw_label(data_right_raw, label_right_raw-1)
         data_left = draw_label(data_left, label_left)
         data_right = draw_label(data_right, label_right)
         data_warp = draw_label(pred_left, label_warp)
         for j in range(0, data_left.shape[0]):
-            result_raw = np.concatenate(data_left_raw[j, ...], data_right_raw[j, ...])
+            result_raw = np.concatenate([data_left_raw[j, ...], data_right_raw[j, ...]], axis=1)
             result = np.concatenate([data_left[j, ...], data_right[j, ...], data_warp[j, ...]], axis=1)
             # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
-            result = cv2.resize(result, None, fx=2, fy=2)
-            result_raw = cv2.resize(result_raw, None, fx=2, fy=2)
+            # result = cv2.resize(result, None, fx=2, fy=2)
+            # result_raw = cv2.resize(result_raw, None, fx=2, fy=2)
             # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
             # delta = cv2.resize(delta, None, fx=2, fy=2)
             #cv2.imshow("delta", delta)
