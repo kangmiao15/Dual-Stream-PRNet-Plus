@@ -85,11 +85,17 @@ def net_forward(net, data_warp, data_fix, label_warp, gpu):
     with torch.no_grad():
         # forward
         predict, flow, delta_list = net(data)
+    last_flow = apply_offset(delta_list[-1])
+    from net.cascade_fusion_net import permute_channel_last
+    last_warp = F.grid_sample(data_warp, permute_channel_last(last_flow),
+                     mode='bilinear', padding_mode="border")
     predict = predict.squeeze()
     predict = predict.cpu().numpy()
+    last_warp = last_warp.squeeze()
+    last_warp = last_warp.cpu().numpy()
     flow = flow.squeeze()
 
-    return predict, flow, delta_list
+    return predict, flow, delta_list, last_warp
 
 def draw_label(data, label):
     point_size = 1
@@ -168,7 +174,7 @@ if __name__ == '__main__':
     if args.gpu:
         print('GPU')
         net = net.cuda()
-    pred_left, flow, delta_list = net_forward(net, data_left, data_right, label_right, args.gpu)
+    pred_left, flow, delta_list, last_warp = net_forward(net, data_left, data_right, label_right, args.gpu)
     flow = revert_offset(flow.unsqueeze(0))
     flow = flow.squeeze()
     # compute TRE
@@ -197,6 +203,7 @@ if __name__ == '__main__':
         label_left = label_left.astype(np.uint32)
         label_warp = label_warp.astype(np.uint32)
         pred_left = (pred_left*255).astype(np.uint8)
+        last_warp = (last_warp*255).astype(np.uint8)
         with open('./data/4DCT/Case1Pack/Images/case1_T00_s.img', 'rb') as fid:
             data_left_raw = np.fromfile(fid, np.int16)
             data_left_raw = data_left_raw.reshape(dir_info[case_num]['Size'][::-1])
@@ -218,9 +225,10 @@ if __name__ == '__main__':
         data_left = draw_label(data_left, label_left)
         data_right = draw_label(data_right, label_right)
         data_warp = draw_label(pred_left, label_warp)
+        last_warp = draw_label(last_warp, label_warp)
         for j in range(0, data_left.shape[0]):
-            result_raw = np.concatenate([data_left_raw[j, ...], data_right_raw[j, ...]], axis=1)
-            result = np.concatenate([data_left[j, ...], data_right[j, ...], data_warp[j, ...]], axis=1)
+            # result_raw = np.concatenate([data_left_raw[j, ...], data_right_raw[j, ...]], axis=1)
+            result = np.concatenate([data_left[j, ...], data_right[j, ...], data_warp[j, ...], last_warp[j, ...]], axis=1)
             # result = np.concatenate([data_left[..., j, :], data_right[..., j, :]], axis=1)
             # result = cv2.resize(result, None, fx=2, fy=2)
             # result_raw = cv2.resize(result_raw, None, fx=2, fy=2)
@@ -228,7 +236,7 @@ if __name__ == '__main__':
             # delta = cv2.resize(delta, None, fx=2, fy=2)
             #cv2.imshow("delta", delta)
             cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)
-            cv2.imwrite('./temp/dir_result_raw_%s.jpg' % j, result_raw)
+            # cv2.imwrite('./temp/dir_result_raw_%s.jpg' % j, result_raw)
             # cv2.imshow("result", result)
             #cv2.imshow("flow", cv2.resize(flow[j, ...], None, fx=2, fy=2))
             # cv2.waitKey()
