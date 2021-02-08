@@ -70,11 +70,10 @@ class CenterCropDIR:
 
     def center_crop_idx(self, org, dst, crop_offset):
         center = org/2.0 + crop_offset
-        if (org - dst) > 2 * self.rnd_offset and self.rnd_offset > 0:
+        if self.rnd_offset > 0:
             rnd = random.randint(-self.rnd_offset, self.rnd_offset)
-        else:
+        if center + rnd < dst/2.0 or center + rnd + dst/2.0 >= dst:
             rnd = 0
-        print('rnd',rnd)
         center = center + rnd
         start = int(center - dst/2.0)
         end = int(center + dst/2.0)
@@ -179,7 +178,6 @@ class CropPadlandmarks:
         #         new_landmarks.append([d, h, w])
         # new_landmarks = np.array(new_landmarks)
         # new_landmarks = new_landmarks - np.array([D_start, H_start, W_start])
-        print([D_start, H_start, W_start])
         return [ volume[D_start:D_end, H_start:H_end, W_start:W_end].copy(), [D_start, H_start, W_start]]
 
     def center_crop_idx(self, org, dst):
