@@ -10,7 +10,6 @@ import torch
 from scipy.ndimage import zoom
 from torch.utils.data import Dataset
 
-
 class DIRLabDataset(Dataset):
 
     def __init__(self, data_root, data_list, trans=[], with_label=False):
@@ -31,16 +30,18 @@ class DIRLabDataset(Dataset):
         label_path = os.path.join(self.data_root.replace('mha/', ''), data_id.capitalize()+'Pack', 'ExtremePhases', "%s_300_%s_xyz.txt" % (data_id.capitalize(), data_time))
         print(label_path)
         # load raw data
+        case_id = int(label_path.split('/')[-1].split('_')[0].replace('Case', ''))-1
         data = sitk.ReadImage(data_path)
         data = sitk.GetArrayFromImage(data)
         self.data_shape = data.shape
         # normalization
         data = data.astype(np.float32)
-        data = np.clip(data, -1000, 400)
+        data = np.clip(data, -1000, 500)
         data = (data-data.min())/(data.max()-data.min())
 
         for trans in self.trans:
-            data, self.delta = trans(data)
+            # data, self.delta = trans(data)
+            data = trans(data,case_id)
         if self.with_label:
             label = np.loadtxt(label_path)
             # change to (D, H, W) as data shape
@@ -52,24 +53,25 @@ class DIRLabDataset(Dataset):
 if __name__ == '__main__':
     data_root = sys.argv[1]
     import sys
-    sys.path.append('/data/guosheng/dual_prnet_plus_rev')
+    sys.path.append('/media/ubuntu/DISK2/code/remote/dual_prnet_plus_rev_mg37')
     from preprocess import *
-    train_idx = [i for i in range(1, 11)]
-    fold = 0
-    train_idx.pop(0)
-    data_list = [ ("case%d" % (i) , "T%02d" % j) for i in train_idx for j in range(0, 100, 10)]
+    train_idx = [i for i in range(1, 3)]
+    fold = 1
+    train_idx.pop(1)
+    print(train_idx)
+    data_list = [ ("case%d" % (i) , "T%02d" % j) for i in train_idx for j in range(0, 100, 50)]
     data_list.sort()
     trans_data = [
-            CenterCrop(dst_size=(96,224,224), rnd_offset=2),
+            CenterCropDIR(dst_size=(96,224,224), rnd_offset=5),
         ]
     dataset = DIRLabDataset(data_root, data_list, trans=trans_data)
     num_data = len(dataset)
     for i in range(num_data):
         data = dataset[i]
         print(data.shape)
-        # for j in range(data.shape[0]):
-        #     frame = data[j, :, :]
-        #     frame = (255*frame).astype(np.uint8)
-        #     cv2.imwrite('./temp/%s_%s.jpg' % (i, j), frame)
-            # cv2.imshow("frame", frame)
-            # cv2.waitKey(50)
+        for j in range(data.shape[0]):
+            frame = data[j, :, :]
+            frame = (255*frame).astype(np.uint8)
+            # cv2.imwrite('./temp/%s_%s.jpg' % (i, j), frame)
+            cv2.imshow("frame", frame)
+            cv2.waitKey(50)

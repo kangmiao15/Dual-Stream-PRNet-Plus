@@ -35,7 +35,51 @@ class CenterCrop:
         start = int(center - dst/2.0)
         end = int(center + dst/2.0)
         return start, end
+
+class CenterCropDIR:
     
+    def __init__(self, dst_size, rnd_offset=-1):
+        self.dst_size = dst_size
+        self.CropOffset = [[0,0,0],[0,-15,0],[0,0,0],[0,0,0],[0,10,0],
+            [0,-20,20], [0,-20,10], [0,-65,0], [-16,-30,0], [-10,-20,0]]
+        self.rnd_offset = rnd_offset
+    
+
+    def __call__(self, volume, case):
+        dst_D, dst_H, dst_W = self.dst_size
+        org_D, org_H, org_W = volume.shape
+        if dst_D > org_D:
+            pad = np.zeros((dst_D-org_D, volume.shape[1], volume.shape[2]), dtype=volume.dtype)
+            volume = np.concatenate((volume, pad), axis=0)
+        if dst_H > org_H:
+            pad = np.zeros((volume.shape[0], dst_H-org_H, volume.shape[2]), dtype=volume.dtype)
+            volume = np.concatenate((volume, pad), axis=1)
+        if dst_W > org_W:
+            pad = np.zeros((volume.shape[0], volume.shape[1], dst_W-org_W), dtype=volume.dtype)
+            volume = np.concatenate((volume, pad), axis=2)
+        org_D, org_H, org_W = volume.shape
+        crop_offset = self.CropOffset[case]
+        D_start, D_end = self.center_crop_idx(org_D, dst_D, crop_offset[0])
+        H_start, H_end = self.center_crop_idx(org_H, dst_H, crop_offset[1])
+        W_start, W_end = self.center_crop_idx(org_W, dst_W, crop_offset[2])
+        if type(volume) is list:
+            return [ v[D_start:D_end, H_start:H_end, W_start:W_end].copy() for v in volume ]
+        else:
+            return volume[D_start:D_end, H_start:H_end, W_start:W_end].copy()
+        
+
+    def center_crop_idx(self, org, dst, crop_offset):
+        center = org/2.0 + crop_offset
+        if (org - dst) > 2 * self.rnd_offset and self.rnd_offset > 0:
+            rnd = random.randint(-self.rnd_offset, self.rnd_offset)
+        else:
+            rnd = 0
+        print('rnd',rnd)
+        center = center + rnd
+        start = int(center - dst/2.0)
+        end = int(center + dst/2.0)
+        return start, end
+
 class CenterCroplandmarks:
     
     def __init__(self, dst_size, rnd_offset=-1):
@@ -145,6 +189,7 @@ class CropPadlandmarks:
         start = int(center - dst/2.0)
         end = int(center + dst/2.0)
         return start, end
+
 class RandomRotate3D:
 
     def __init__(self):
@@ -284,62 +329,6 @@ class RandomRotate:
             im = np.rot90(im, rotate)
             mask = np.rot90(mask, rotate)
         return im.copy(), mask.copy()
-
-class CenterCropDIR(object):
-    """crop image in the center
-    input: residual
-        image, shape(D, H, W)
-        dims,
-    output:
-        image, image volumes cropped from input image.
-        delta, list, the difference between two origins.
-    """
-    def __init__(self):
-        self.Residual = [[0,0,0],[0,-15,0],[0,0,0],[0,0,0],[0,10,0],
-            [0,-20,20], [0,-20,10], [0,-65,0], [-16,-30,0], [-10,-20,0]]
-        
-    def __call__(self, image, case, dims):
-        #pad, if image.dims is lower than dims
-        self.residual = self.Residual[case]
-        dims, shape = np.array(dims), np.array(image.shape)
-        p = np.flip(dims - shape, axis=0)
-        p[p<0] = 0
-
-        p_h0, p_h1 = p // 2, p - p//2
-        #(padLeft, padRight, padTop, padBottom, padFront, padBack)
-        p3d = np.stack((p_h0, p_h1), axis=1).reshape(-1)
-        #5D Tensor 
-        image = torch.Tensor(image).unsqueeze(0).unsqueeze(0)           
-        padded = F.pad(image, tuple(p3d), 'replicate')
-        padded = padded.squeeze().numpy()
-        #crop
-        d0, h0, w0 = dims
-        dim_hf0 = (np.array(padded.shape) - dims) // 2 + self.residual
-        d_hf, h_hf, w_hf = dim_hf0
-        # d_hf = max(d_hf, 0)
-        # h_hf = max(h_hf, 0)
-        # w_hf = max(w_hf, 0)
-        cropped = padded[d_hf:d0+d_hf, h_hf:h0+h_hf, w_hf:w0+w_hf]
-        
-#        dim_hf1 = np.array(padded.shape) - dims - dim_hf0
-        delta = np.flip(p_h0, axis=0)- dim_hf0
-        return cropped, delta
-class OneNorm(object):
-    """Normalize Tensor image into range(0, 1).
-    """
-    def __init__(self, bound=None):#[-1000, 500]
-        self.bound = bound
-        
-    def __call__(self, patch):
-        patch = patch.astype('float32')
-        if self.bound is None:
-            min, max = patch.min(), patch.max()
-        else:
-            min, max = self.bound
-        patch = (patch-min) / (max-min)
-        patch[patch > 1] = 1
-        patch[patch < 0] = 0
-        return patch
 
 def ReSample(image, old_spacing, new_spacing):
     '''

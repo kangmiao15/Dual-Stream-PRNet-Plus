@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 
 def build_dataset(args):
     trans_data = [
-            CenterCrop(dst_size=(96,224,224))
+            CenterCropDIR(dst_size=(96,224,224),rnd_offset=5)
             # CenterCrop(dst_size=(160,176,128), rnd_offset=5),
         ]
     trans_pair = [
@@ -42,7 +42,7 @@ def build_dataset(args):
 
 def loss_fn(pred_warp, data_fix, flow, delta_list):
     loss_smi = NCCLoss(window=(9,9,9))(pred_warp, data_fix)
-    loss_smooth = sum([ grad_loss3d(delta) for delta in delta_list ])
+    loss_smooth = 0.05 * sum([ grad_loss3d(delta) for delta in delta_list ])
     return loss_smi, loss_smooth
 
 
@@ -109,11 +109,11 @@ def parse_args():
     parser.add_argument( '--world_size', help='number of process', default=1, type=int)
     parser.add_argument("--local_rank", default=0, type=int)
     parser.add_argument("--net", help="netname for network factory", type=str)
-    parser.add_argument("--num_epoch", help="number of total epoch", default=200, type=int)
+    parser.add_argument("--num_epoch", help="number of total epoch", default=300, type=int)
     parser.add_argument("--batch_size", help="batch size", default=1, type=int)
     parser.add_argument("--train_data_root", help="training data folder", type=str)
     parser.add_argument("--fold", help="fold for cross validation", default=0, type=int)
-    parser.add_argument("--save_interval", help="save interval", default=1, type=str)
+    parser.add_argument("--save_interval", help="save interval", default=5, type=str)
     parser.add_argument("--tag", help="output name", default='default', type=str)
 
     if len(sys.argv) == 1:
