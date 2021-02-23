@@ -87,8 +87,6 @@ def net_forward(net, data_warp, data_fix, label_warp, gpu):
         predict, flow, delta_list = net(data)
     predict = predict.squeeze()
     predict = predict.cpu().numpy()
-    last_warp = last_warp.squeeze()
-    last_warp = last_warp.cpu().numpy()
     # flow = flow.squeeze()
 
     return predict, flow, delta_list
@@ -172,24 +170,37 @@ if __name__ == '__main__':
         net = net.cuda()
     pred_left, flow, delta_list = net_forward(net, data_left, data_right, label_right, args.gpu)
     # compute TRE
-    ref_lmk_index = np.round(label_right).astype('int32')
-    label_warp = label_right.copy()
+    ref_lmk_index = np.round(label_left).astype('int32')
+    label_warp = label_left.copy()
     from net.cascade_fusion_net import permute_channel_last
     for i in range(300):
         di, hi, wi = ref_lmk_index[i]
-        mask = torch.zeros_like(data_right)
-        mask[:, di, hi, wi] = 255
+        print('ref:', ref_lmk_index[i])
+        mask = torch.zeros([1,1,96,224,224], device=flow.device)
+        try:
+            mask[:, :, di, hi, wi] = 255
+        except:
+            print('landmark out of range:', ref_lmk_index[i])
+            continue
         mask_warp = F.grid_sample(mask, permute_channel_last(flow),
                      mode='bilinear', padding_mode="border")
-        warp_lmk_index = torch.argmax(mask_warp)
-        print(warp_lmk_index)
+        mask_warp = mask_warp.squeeze()
+        mask_warp = mask_warp.cpu().numpy().copy()
+        if mask_warp.max()!=0:
+            warp_idx1 = np.where(mask_warp==mask_warp.max())
+            mask_warp[warp_idx1] = -1
+            if mask_warp.max() != 0:
+                warp_idx2 = np.where(mask_warp==mask_warp.max())
+                warp_idx1 = (np.array(warp_idx1) + np.array(warp_idx2))*0.5
+            label_warp[i] = tuple(warp_idx1)
+       
     # compute TRE
     #no reg
     tre_mean_bf, tre_std_bf, diff_br = compute_tre(label_left, label_right, img_spacing)
     print('TRE-before reg, mean: {:.2f},std: {:.2f}'.format(
             tre_mean_bf, tre_std_bf))
     #with reg
-    tre_mean_af, tre_std_af, diff_ar = compute_tre(label_left, label_warp, img_spacing)
+    tre_mean_af, tre_std_af, diff_ar = compute_tre(label_warp, label_right, img_spacing)
     print('TRE-after reg, mean: {:.2f},std: {:.2f}'.format(tre_mean_af, tre_std_af))
     if args.vis:
         # to numpy
@@ -231,6 +242,7 @@ if __name__ == '__main__':
             # result = cv2.resize(result, None, fx=2, fy=2)
             # result_raw = cv2.resize(result_raw, None, fx=2, fy=2)
             # delta = np.concatenate([o[j, ...] for o in offset_list], axis=1)
+            warp_idx = np.where(mask_warp!=0)
             # delta = cv2.resize(delta, None, fx=2, fy=2)
             #cv2.imshow("delta", delta)
             cv2.imwrite('./temp/dir_result_%s.jpg' % j, result)

@@ -41,8 +41,8 @@ class DIRLabDataset(Dataset):
         data = (data-data.min())/(data.max()-data.min())
 
         for trans in self.trans:
-            # data, self.delta = trans(data)
-            data = trans(data,case_id)
+            data, self.delta = trans(data)
+            # data = trans(data,case_id)
         if self.with_label:
             label = np.loadtxt(label_path)
             # change to (D, H, W) as data shape
