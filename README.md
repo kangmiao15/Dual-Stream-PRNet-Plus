@@ -1,6 +1,6 @@
 # Dual-Stream-PRNet-Plus  
 
-Code for Dual-Stream PRNet++  
+Official Code for Dual-stream Pyramid Registration Network（Dual-Stream PRNet++ ）Published in Medical Image Analysis
 
 ## build correlation_cuda  
   cuda==10.1, torch=1.40
